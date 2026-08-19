@@ -65,6 +65,7 @@ var detailAPIs = [
                 country: info.country || "未知",
                 asn: info.as || "未知"
             };
+        }
     }
 ];
 
