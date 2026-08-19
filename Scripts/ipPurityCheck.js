@@ -9,6 +9,7 @@ IP纯度检测 for Loon
   2026-08-19 初始版本
   2026-08-19 修复empty content
   2026-08-19 修复timeout: 增加超时时间, 多API源切换
+  2026-08-19 修复代理节点请求超时问题, 新增多源API
 */
 
 var nodeName = "当前节点";
@@ -20,30 +21,38 @@ if ($environment && $environment.params && $environment.params.node) {
     targetNode = $environment.params.node;
 }
 
-// API源列表 (按优先级排序)
-var APIs = [
+// 简单API列表 (纯IP获取，可能不经过代理节点)
+var simpleAPIs = [
+    "https://api.ipify.org?format=json",
+    "https://ifconfig.me/ip",
+    "https://icanhazip.com",
+    "https://api.ip.sb/ip",
+    "https://ipv4.icanhazip.com",
+    "https://check.torproject.org/api/ip"
+];
+
+// 详细API列表 (IP信息查询)
+var detailAPIs = [
     {
-        name: "ipwho.is",
         url: "https://ipwho.is",
-        parse: function (body) {
+        parse: function(body) {
             var info = JSON.parse(body);
             if (!info || info.success !== true) throw new Error("查询失败");
             return {
                 ip: info.ip,
-                org: info.connection.org || "未知",
-                isp: info.connection.isp || "未知",
-                domain: info.connection.domain || "",
+                org: (info.connection && info.connection.org) || "未知",
+                isp: (info.connection && info.connection.isp) || "未知",
+                domain: (info.connection && info.connection.domain) || "",
                 city: info.city || "未知",
                 region: info.region || "",
                 country: info.country || "未知",
-                asn: info.connection.asn || "未知"
+                asn: (info.connection && info.connection.asn) || "未知"
             };
         }
     },
     {
-        name: "ip-api.com",
         url: "https://ip-api.com/json/?lang=zh-CN&fields=status,message,query,country,regionName,city,isp,org,as,orgname",
-        parse: function (body) {
+        parse: function(body) {
             var info = JSON.parse(body);
             if (!info || info.status !== "success") throw new Error(info.message || "查询失败");
             return {
@@ -56,38 +65,90 @@ var APIs = [
                 country: info.country || "未知",
                 asn: info.as || "未知"
             };
-        }
     }
 ];
 
-var apiIndex = 0;
+var simpleIndex = 0;
+var detailIndex = 0;
 
-// 尝试API
-function tryAPI() {
-    if (apiIndex >= APIs.length) {
-        // 所有API都失败了，用ipify兜底
-        return simpleCheck();
+// 先获取简单IP
+function getSimpleIP() {
+    if (simpleIndex >= simpleAPIs.length) {
+        // 所有简单API失败
+        return finish("<b style='color:red'>❌ 所有API不可用</b><br>请检查网络连接", nodeName);
     }
 
-    var api = APIs[apiIndex];
+    var url = simpleAPIs[simpleIndex];
+    console.log("尝试简单API: " + url);
+
+    var req = {
+        url: url,
+        timeout: 8,
+        headers: {
+            "User-Agent": "Mozilla/5.0"
+        }
+    };
+
+    $httpClient.get(req, function(error, response, body) {
+        if (error || !body) {
+            console.log("简单API " + url + " 失败: " + (error || "无响应"));
+            simpleIndex++;
+            getSimpleIP();
+            return;
+        }
+
+        var ip = "";
+        try {
+            if (url.indexOf("ipify") !== -1) {
+                ip = JSON.parse(body).ip;
+            } else {
+                ip = (body || "").trim();
+                // 验证是否是IP格式
+                if (!/^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$/.test(ip)) {
+                    console.log("IP格式错误: " + ip);
+                    simpleIndex++;
+                    getSimpleIP();
+                    return;
+                }
+            }
+        } catch (e) {
+            console.log("解析IP失败: " + e.message);
+            simpleIndex++;
+            getSimpleIP();
+            return;
+        }
+
+        console.log("简单IP获取成功: " + ip);
+        // IP获取成功，再尝试获取详情
+        getDetailInfo(ip);
+    });
+}
+
+// 获取详细信息
+function getDetailInfo(ip) {
+    if (detailIndex >= detailAPIs.length) {
+        // 详细API也都失败，只显示IP
+        var html = "<b>⚠️ 仅获取到IP</b><br>" + ip + "<br><br><font color='#999'>详细信息API不可用</font>";
+        return finish(html, nodeName);
+    }
+
+    var api = detailAPIs[detailIndex];
+    console.log("尝试详情API: " + api.url);
+
     var req = {
         url: api.url,
-        timeout: 15,
+        timeout: 12,
         headers: {
-            "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36",
+            "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)",
             "Accept": "application/json"
         }
     };
 
-    if (targetNode) {
-        req.node = targetNode;
-    }
-
-    $httpClient.get(req, function (error, response, body) {
+    $httpClient.get(req, function(error, response, body) {
         if (error || !body) {
-            console.log("API " + api.name + " 失败: " + (error || "无响应"));
-            apiIndex++;
-            tryAPI();
+            console.log("详情API " + api.url + " 失败: " + (error || "无响应"));
+            detailIndex++;
+            getDetailInfo(ip);
             return;
         }
 
@@ -95,43 +156,9 @@ function tryAPI() {
             var info = api.parse(body);
             showResult(info);
         } catch (e) {
-            console.log("API " + api.name + " 解析失败: " + e.message);
-            apiIndex++;
-            tryAPI();
-        }
-    });
-}
-
-// 简单IP检测 (兜底)
-function simpleCheck() {
-    var req = {
-        url: "https://api.ipify.org?format=json",
-        timeout: 10,
-        headers: {
-            "User-Agent": "Mozilla/5.0"
-        }
-    };
-
-    if (targetNode) {
-        req.node = targetNode;
-    }
-
-    $httpClient.get(req, function (e2, r2, body2) {
-        if (e2 || !body2) {
-            return finish("<b style='color:red'>❌ 所有API不可用</b><br>请检查节点网络连接", nodeName);
-        }
-
-        var ip = "未知";
-        try { ip = JSON.parse(body2).ip || "未知"; }
-        catch (_) {
-            var m = (body2 || "").match(/(\d{1,3}\.){3}\d{1,3}/);
-            if (m) ip = m[0];
-        }
-
-        if (ip !== "未知") {
-            return finish("<b>⚠️ 仅获取到IP:</b> " + ip + "<br><font color='#999'>纯度检测API均不可用</font>", nodeName);
-        } else {
-            return finish("<b style='color:red'>❌ 节点不可用</b><br>" + (e2 || "网络超时"), nodeName);
+            console.log("详情API解析失败: " + e.message);
+            detailIndex++;
+            getDetailInfo(ip);
         }
     });
 }
@@ -177,7 +204,7 @@ function showResult(info) {
     html += "<div style='text-align:center;font-family:-apple-system;padding:10px;'>";
     html += "<b style='color:" + color + ";font-size:18px;'>" + icon + " " + (pure ? "纯净" : "非纯净") + "</b>";
     html += "<br><br>";
-    html += "<b style='color:#666'>📍 IP</b><br>" + info.ip + "<br><br>";
+    html += "<b style='color:#666'>📍 IP</b><br>" + escapeHtml(info.ip) + "<br><br>";
     html += "<b style='color:#666'>🏷️ 类型</b><br><font color='" + color + "'>" + category + "</font><br><br>";
     html += "<b style='color:#666'>🗺️ 位置</b><br>" + escapeHtml(info.country) + " " + escapeHtml(info.region) + " " + escapeHtml(info.city) + "<br><br>";
     html += "<b style='color:#666'>🏢 组织</b><br>" + escapeHtml(info.org) + "<br><br>";
@@ -195,7 +222,7 @@ function showResult(info) {
 // HTML转义
 function escapeHtml(str) {
     if (!str) return "";
-    return String(str).replace(/[&<>"']/g, function (c) {
+    return String(str).replace(/[&<>"']/g, function(c) {
         return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c];
     });
 }
@@ -208,5 +235,5 @@ function finish(html, node) {
     });
 }
 
-// 启动
-tryAPI();
+// 启动: 先尝试获取简单IP
+getSimpleIP();
