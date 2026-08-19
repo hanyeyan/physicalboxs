@@ -1,133 +1,416 @@
 /*
-IP纯度检测 for Loon
-使用 ippure.com 官方API检测节点出口IP纯度
+ * Loon - IPPure Node Purity Detector
+ *
+ * 功能：
+ * 1. 获取 Generic Script 当前传入的节点
+ * 2. 强制通过该节点访问 IPPure
+ * 3. 检测该节点实际出口 IP
+ * 4. 显示 IP / ASN / ISP / 地区 / Fraud Score
+ * 5. 判断 Residential / Broadcast
+ * 6. Loon Notification 通知
+ *
+ * 要求：
+ * Loon Build 410+
+ *
+ * Generic Script:
+ * generic script-path=https://raw.githubusercontent.com/hanyeyan/physicalboxs/main/Scripts/ipPurityCheck.js, timeout=15, tag=IP纯度检测
+ */
 
-[Script]
-  generic script-path=https://raw.githubusercontent.com/hanyeyan/physicalboxs/main/Scripts/ipPurityCheck.js, timeout=15, tag=IP纯度检测
+const API_URL = "https://my.ippure.com/v1/info";
+const TIMEOUT = 12000;
 
-修改记录:
-  2026-08-19 初始版本
-  2026-08-19 修复empty content
-  2026-08-19 改用 ippure.com 官方API
-*/
 
-var nodeName = "当前节点";
+// ==============================
+// 获取当前执行节点
+// ==============================
 
-// 获取节点名
-if ($environment && $environment.params && $environment.params.node) {
-    nodeName = $environment.params.node;
+let nodeName = "";
+
+try {
+    if (
+        typeof $environment !== "undefined" &&
+        $environment.params
+    ) {
+        nodeName = $environment.params.node || "";
+    }
+} catch (e) {
+    nodeName = "";
 }
 
-// 构造请求
-var req = {
-    url: "https://my.ippure.com/v1/info",
-    timeout: 10,
-    headers: {
-        "User-Agent": "Mozilla/5.0"
-    }
-};
 
-// node-check模式下指定节点
-if ($environment && $environment.params && $environment.params.node) {
-    req.node = $environment.params.node;
+// ==============================
+// 工具函数
+// ==============================
+
+function notify(title, subtitle, content) {
+
+    $notification.post(
+        title,
+        subtitle,
+        content
+    );
 }
 
-$httpClient.get(req, function(error, response, body) {
-    if (error || !body) {
-        return finish("<b style='color:red'>❌ 请求失败</b><br>" + (error || "无响应"), nodeName);
+
+function safe(value, fallback = "未知") {
+
+    if (
+        value === undefined ||
+        value === null ||
+        value === ""
+    ) {
+        return fallback;
     }
 
-    var info;
-    try { info = JSON.parse(body); }
-    catch (e) {
-        return finish("<b style='color:red'>❌ 数据解析失败</b><br>" + body, nodeName);
+    return String(value);
+}
+
+
+function boolText(value) {
+
+    if (value === true) {
+        return "是";
     }
 
-    if (!info || !info.ip) {
-        return finish("<b style='color:red'>❌ 无有效数据</b>", nodeName);
+    if (value === false) {
+        return "否";
     }
 
-    // ---- 提取字段 ----
-    var ip = info.ip;
-    var asn = info.asn;
-    var org = info.asOrganization || "未知";
-    var country = info.country || "未知";
-    var region = info.region || "";
-    var city = info.city || "未知";
-    var fraudScore = info.fraudScore || 0;
-    var isResidential = info.isResidential || false;
-    var isBroadcast = info.isBroadcast || false;
-    var timezone = info.timezone || "";
+    return "未知";
+}
 
-    // ---- 纯度判断 ----
-    var pure = true;
-    var category = "";
-    var scoreColor = "#10b981";
-    var scoreText = "低风险";
 
-    if (fraudScore >= 51) {
-        pure = false;
-        scoreColor = "#ef4444";
-        scoreText = "高风险";
-    } else if (fraudScore >= 21) {
-        pure = false;
-        scoreColor = "#f59e0b";
-        scoreText = "中风险";
+function riskLevel(score) {
+
+    if (
+        score === undefined ||
+        score === null ||
+        isNaN(Number(score))
+    ) {
+        return "未知";
     }
 
-    if (isResidential) {
-        category = "住宅IP";
-        if (fraudScore <= 20) {
-            pure = true;
-            scoreText = "纯净";
-            scoreColor = "#10b981";
+    score = Number(score);
+
+    if (score <= 20) {
+        return "🟢 很干净";
+    }
+
+    if (score <= 40) {
+        return "🟡 一般";
+    }
+
+    if (score <= 60) {
+        return "🟠 有风险";
+    }
+
+    if (score <= 80) {
+        return "🔴 高风险";
+    }
+
+    return "⛔ 极高风险";
+}
+
+
+function nodeType(data) {
+
+    /*
+     * IPPure 当前公开 /v1/info
+     * 主要提供 isResidential / isBroadcast。
+     *
+     * 如果以后 API 增加 isDataCenter / isHosting
+     * 等字段，这里也兼容。
+     */
+
+    if (data.isDataCenter === true) {
+        return "IDC";
+    }
+
+    if (data.isHosting === true) {
+        return "IDC / Hosting";
+    }
+
+    if (data.isResidential === true) {
+        return "住宅";
+    }
+
+    if (data.isResidential === false) {
+        return "非住宅 / 商业网络";
+    }
+
+    return "未知";
+}
+
+
+// ==============================
+// 主函数
+// ==============================
+
+function main() {
+
+    // ------------------------------
+    // 没有获取到节点
+    // ------------------------------
+
+    if (!nodeName) {
+
+        notify(
+            "🛡 IPPure 节点检测",
+            "未获取到节点",
+            "请将脚本设置为 Generic Script，并从节点上下文执行。"
+        );
+
+        $done();
+        return;
+    }
+
+
+    // ------------------------------
+    // 请求 IPPure
+    //
+    // 关键：
+    // node: nodeName
+    //
+    // 这会让 API 请求通过指定节点
+    // ------------------------------
+
+    const request = {
+
+        url: API_URL,
+
+        timeout: TIMEOUT,
+
+        headers: {
+            "User-Agent": "Loon-IPPure-Checker"
+        },
+
+        node: nodeName
+    };
+
+
+    $httpClient.get(
+        request,
+        function (
+            error,
+            response,
+            body
+        ) {
+
+            // --------------------------
+            // 请求失败
+            // --------------------------
+
+            if (error) {
+
+                notify(
+                    "❌ IPPure 检测失败",
+                    nodeName,
+                    "无法通过该节点访问 IPPure\n\n" +
+                    "错误：" + error
+                );
+
+                $done();
+                return;
+            }
+
+
+            // --------------------------
+            // HTTP 状态码
+            // --------------------------
+
+            if (
+                !response ||
+                response.status < 200 ||
+                response.status >= 300
+            ) {
+
+                notify(
+                    "❌ IPPure 检测失败",
+                    nodeName,
+                    "HTTP 状态码：" +
+                    safe(
+                        response && response.status,
+                        "未知"
+                    )
+                );
+
+                $done();
+                return;
+            }
+
+
+            // --------------------------
+            // JSON
+            // --------------------------
+
+            let data;
+
+            try {
+
+                data = JSON.parse(body);
+
+            } catch (e) {
+
+                notify(
+                    "❌ IPPure 数据错误",
+                    nodeName,
+                    "API 返回的数据不是有效 JSON。\n\n" +
+                    String(body).substring(0, 300)
+                );
+
+                $done();
+                return;
+            }
+
+
+            // --------------------------
+            // 基础信息
+            // --------------------------
+
+            const ip =
+                safe(data.ip);
+
+            const asn =
+                data.asn !== undefined
+                    ? "AS" + data.asn
+                    : "未知";
+
+            const org =
+                safe(data.asOrganization);
+
+            const country =
+                safe(data.countryCode, "");
+
+            const countryName =
+                safe(data.country, "");
+
+            const region =
+                safe(data.region, "");
+
+            const city =
+                safe(data.city, "");
+
+            const timezone =
+                safe(data.timezone, "");
+
+
+            // --------------------------
+            // 风险
+            // --------------------------
+
+            const fraudScore =
+                data.fraudScore !== undefined
+                    ? Number(data.fraudScore)
+                    : null;
+
+            const risk =
+                riskLevel(fraudScore);
+
+
+            // --------------------------
+            // IP 类型
+            // --------------------------
+
+            const residential =
+                boolText(data.isResidential);
+
+            const broadcast =
+                boolText(data.isBroadcast);
+
+            const type =
+                nodeType(data);
+
+
+            // --------------------------
+            // 组装地区
+            // --------------------------
+
+            let location = "";
+
+            if (countryName) {
+                location += countryName;
+            }
+
+            if (country) {
+                location +=
+                    location
+                        ? " (" + country + ")"
+                        : country;
+            }
+
+            if (region) {
+                location +=
+                    location
+                        ? " / " + region
+                        : region;
+            }
+
+            if (city) {
+                location +=
+                    location
+                        ? " / " + city
+                        : city;
+            }
+
+            if (!location) {
+                location = "未知";
+            }
+
+
+            // --------------------------
+            // 风险分显示
+            // --------------------------
+
+            let scoreText = "未知";
+
+            if (fraudScore !== null) {
+
+                scoreText =
+                    fraudScore +
+                    " / 100";
+            }
+
+
+            // --------------------------
+            // 最终通知
+            // --------------------------
+
+            const content =
+
+                "IP        " + ip + "\n" +
+
+                "ASN       " + asn + "\n" +
+
+                "ISP       " + org + "\n" +
+
+                "地区      " + location + "\n" +
+
+                "\n" +
+
+                "类型      " + type + "\n" +
+
+                "住宅      " + residential + "\n" +
+
+                "Broadcast " + broadcast + "\n" +
+
+                "\n" +
+
+                "风险分    " + scoreText + "\n" +
+
+                "风险等级  " + risk;
+
+
+            notify(
+                "🛡 IPPure 节点纯净度",
+                nodeName,
+                content
+            );
+
+
+            $done();
         }
-    } else if (isBroadcast) {
-        category = "广播IP";
-        pure = false;
-    } else {
-        category = "非住宅IP";
-        pure = false;
-    }
-
-    // ---- 输出 ----
-    var icon = pure ? "✅" : "⚠️";
-    var mainColor = pure ? "#10b981" : "#f59e0b";
-
-    var html = "";
-    html += "<div style='text-align:center;font-family:-apple-system;padding:8px;'>";
-    html += "<b style='color:" + mainColor + ";font-size:18px;'>" + icon + " " + scoreText + "</b>";
-    html += "<br><br>";
-    html += "<b style='color:#666'>📍 IP</b><br>" + ip + "<br><br>";
-    html += "<b style='color:#666'>🏷️ 类型</b><br><font color='" + mainColor + "'>" + category + "</font><br><br>";
-    html += "<b style='color:#666'>🎯 欺诈分数</b><br><font color='" + scoreColor + ";font-weight:bold;'>" + fraudScore + "/100 " + scoreText + "</font><br><br>";
-    html += "<b style='color:#666'>🗺️ 位置</b><br>" + escapeHtml(country) + " " + escapeHtml(region) + " " + escapeHtml(city) + "<br><br>";
-    html += "<b style='color:#666'>🏢 AS组织</b><br>" + escapeHtml(org) + "<br><br>";
-    if (asn) {
-        html += "<b style='color:#666'>🔢 ASN</b><br>AS" + asn + "<br><br>";
-    }
-    if (timezone) {
-        html += "<b style='color:#666'>🕐 时区</b><br>" + escapeHtml(timezone) + "<br><br>";
-    }
-    html += "<hr style='border:1px solid #eee;margin:8px 0;'>";
-    html += "<font color='#6959CD'><b>节点</b> ➟ " + escapeHtml(nodeName) + "</font>";
-    html += "</div>";
-
-    finish(html, nodeName);
-});
-
-// HTML转义
-function escapeHtml(str) {
-    if (!str) return "";
-    return String(str).replace(/[&<>"']/g, function(c) {
-        return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c];
-    });
+    );
 }
 
-// 统一输出
-function finish(html, node) {
-    $done({
-        title: "   IP纯度检测",
-        htmlMessage: html
-    });
-}
+
+main();
