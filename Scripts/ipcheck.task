@@ -1,0 +1,3 @@
+[Script]
+
+generic script-path=https://raw.githubusercontent.com/hanyeyan/physicalboxs/main/Scripts/ipPurityCheck.js,timeout=15,tag=IPPure节点纯净度检测
