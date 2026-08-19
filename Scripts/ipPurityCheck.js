@@ -1,535 +1,597 @@
 /*
  * ============================================================
- * Loon IPPure Node Purity Checker
+ * Loon IPPure 节点纯净度检测
  * ============================================================
  *
+ * [Script]
+ * generic script-path=https://你的GitHub地址/IPPure.js, timeout=15
+ *
  * 功能：
- *   获取 Loon 执行时指定的节点
- *   ↓
- *   强制通过该节点访问 IPPure
- *   ↓
- *   获取该节点真实出口 IP
+ *   当前节点 -> IPPure
  *
  * 检测：
  *   IP
  *   ASN
  *   ISP
- *   国家 / 地区 / 城市
- *   Fraud Score
+ *   地区
  *   Residential
  *   Broadcast
+ *   Fraud Score
  *
  * ============================================================
  */
 
 const API_URL = "https://my.ippure.com/v1/info";
-const TIMEOUT = 15000;
+
+const node =
+  $environment.params.node;
 
 
 /* ============================================================
- * 工具
+ * 主函数
  * ============================================================
  */
 
-function safe(value, fallback = "未知") {
-
-    if (
-        value === undefined ||
-        value === null ||
-        value === ""
-    ) {
-        return fallback;
-    }
-
-    return String(value);
-}
-
-
-function boolText(value) {
-
-    if (value === true) {
-        return "✅ 是";
-    }
-
-    if (value === false) {
-        return "❌ 否";
-    }
-
-    return "❔ 未知";
-}
-
-
-function riskLevel(score) {
-
-    if (
-        score === undefined ||
-        score === null ||
-        isNaN(Number(score))
-    ) {
-        return "❔ 未知";
-    }
-
-    score = Number(score);
-
-    if (score <= 20) {
-        return "🟢 很干净";
-    }
-
-    if (score <= 40) {
-        return "🟡 一般";
-    }
-
-    if (score <= 60) {
-        return "🟠 有风险";
-    }
-
-    if (score <= 80) {
-        return "🔴 高风险";
-    }
-
-    return "⛔ 极高风险";
-}
-
-
-function notify(title, subtitle, content) {
-
-    $notification.post(
-        title,
-        subtitle,
-        content
-    );
-}
-
-
-/* ============================================================
- * 获取 Loon 当前执行节点
- * ============================================================
- */
-
-let node = "";
-
-try {
-
-    if (
-        typeof $environment !== "undefined" &&
-        $environment.params
-    ) {
-
-        node =
-            $environment.params.node ||
-            $environment.params.nodeName ||
-            $environment.params.proxy ||
-            $environment.params.proxyName ||
-            "";
-    }
-
-} catch (e) {
-
-    node = "";
-}
-
-
-/* ============================================================
- * 没有节点
- * ============================================================
- */
-
-if (!node) {
-
-    notify(
-        "🛡 IPPure 节点检测",
-        "未获取到节点",
-        "请从 Loon 节点上下文执行该脚本。"
-    );
-
+IPPure_Test()
+  .catch((e) => {
+    $.logErr(e);
     $done();
+  });
 
-} else {
+
+async function IPPure_Test() {
+
+  $.log("开始检测节点：");
+  $.log(node);
 
 
-    /* ========================================================
-     * 构造请求
-     * ========================================================
+  /* ==========================================================
+   * 请求 IPPure
+   * ==========================================================
+   */
+
+  const options = {
+
+    url: API_URL,
+
+    headers: {
+
+      "User-Agent":
+        "Loon-IPPure/1.0",
+
+      "Accept":
+        "application/json"
+    },
+
+    /*
+     * 关键：
+     * 当前 Loon 执行的节点
      */
 
-    const request = {
+    node: node,
 
-        url: API_URL,
-
-        timeout: TIMEOUT,
-
-        headers: {
-
-            "User-Agent":
-                "Loon-IPPure-Checker/1.0",
-
-            "Accept":
-                "application/json"
-        },
-
-        /*
-         * 关键：
-         *
-         * IPPure 请求强制使用
-         * Loon 当前传入的节点
-         */
-
-        node: node
-    };
+    timeout: 10000
+  };
 
 
-    /* ========================================================
-     * 请求 IPPure
-     * ========================================================
-     */
+  return $.http.get(options).then(
+    (resp) => {
 
-    $httpClient.get(
-        request,
+      const body =
+        resp.body;
 
-        function (
-            error,
-            response,
-            body
+
+      $.log("IPPure RAW:");
+      $.log(body);
+
+
+      /* ======================================================
+       * 空数据
+       * ======================================================
+       */
+
+      if (
+        !body ||
+        body.trim() === ""
+      ) {
+
+        $.log(
+          "IPPure 返回 EMPTY CONTENT"
+        );
+
+        $done();
+
+        return;
+      }
+
+
+      /* ======================================================
+       * JSON
+       * ======================================================
+       */
+
+      let data;
+
+      try {
+
+        data =
+          JSON.parse(body);
+
+      } catch (e) {
+
+        $.log(
+          "JSON Parse Error"
+        );
+
+        $.log(body);
+
+        $done();
+
+        return;
+      }
+
+
+      /* ======================================================
+       * 数据
+       * ======================================================
+       */
+
+      const ip =
+        data.ip || "未知";
+
+
+      const asn =
+        data.asn !== undefined
+          ? "AS" + data.asn
+          : "未知";
+
+
+      const isp =
+        data.asOrganization ||
+        "未知";
+
+
+      const country =
+        data.country ||
+        "未知";
+
+
+      const countryCode =
+        data.countryCode ||
+        "";
+
+
+      const city =
+        data.city ||
+        "未知";
+
+
+      const timezone =
+        data.timezone ||
+        "未知";
+
+
+      const fraudScore =
+        data.fraudScore !== undefined
+          ? Number(data.fraudScore)
+          : null;
+
+
+      const residential =
+        data.isResidential;
+
+
+      const broadcast =
+        data.isBroadcast;
+
+
+      /* ======================================================
+       * 风险评级
+       * ======================================================
+       */
+
+      let riskText =
+        "未知";
+
+      let riskColor =
+        "#808080";
+
+
+      if (
+        fraudScore !== null &&
+        !isNaN(fraudScore)
+      ) {
+
+        if (fraudScore <= 20) {
+
+          riskText =
+            "🟢 很干净";
+
+          riskColor =
+            "#16a34a";
+
+        } else if (
+          fraudScore <= 40
         ) {
 
-            /* ==================================================
-             * 网络错误
-             * ==================================================
-             */
+          riskText =
+            "🟡 一般";
 
-            if (error) {
+          riskColor =
+            "#ca8a04";
 
-                notify(
-                    "❌ IPPure 检测失败",
-                    node,
+        } else if (
+          fraudScore <= 60
+        ) {
 
-                    "请求 IPPure 失败\n\n" +
-                    "错误：\n" +
-                    String(error)
-                );
+          riskText =
+            "🟠 有风险";
 
-                $done();
+          riskColor =
+            "#ea580c";
 
-                return;
-            }
+        } else if (
+          fraudScore <= 80
+        ) {
 
+          riskText =
+            "🔴 高风险";
 
-            /* ==================================================
-             * HTTP 错误
-             * ==================================================
-             */
+          riskColor =
+            "#dc2626";
 
-            if (
-                !response ||
-                response.status < 200 ||
-                response.status >= 300
-            ) {
+        } else {
 
-                notify(
-                    "❌ IPPure 检测失败",
-                    node,
+          riskText =
+            "⛔ 极高风险";
 
-                    "HTTP Status： " +
-                    (
-                        response
-                            ? response.status
-                            : "未知"
-                    )
-                );
-
-                $done();
-
-                return;
-            }
-
-
-            /* ==================================================
-             * 空数据
-             * ==================================================
-             */
-
-            if (
-                !body ||
-                String(body).trim() === ""
-            ) {
-
-                notify(
-                    "❌ IPPure 检测失败",
-                    node,
-
-                    "API 返回 EMPTY CONTENT"
-                );
-
-                $done();
-
-                return;
-            }
-
-
-            /* ==================================================
-             * JSON
-             * ==================================================
-             */
-
-            let data;
-
-            try {
-
-                data =
-                    JSON.parse(body);
-
-            } catch (e) {
-
-                notify(
-                    "❌ IPPure 数据错误",
-                    node,
-
-                    "JSON 解析失败\n\n" +
-                    String(body).substring(
-                        0,
-                        500
-                    )
-                );
-
-                $done();
-
-                return;
-            }
-
-
-            /* ==================================================
-             * IP
-             * ==================================================
-             */
-
-            const ip =
-                safe(data.ip);
-
-
-            /* ==================================================
-             * ASN
-             * ==================================================
-             */
-
-            const asn =
-                data.asn !== undefined
-                    ? "AS" + data.asn
-                    : "未知";
-
-
-            /* ==================================================
-             * ISP
-             * ==================================================
-             */
-
-            const isp =
-                safe(
-                    data.asOrganization
-                );
-
-
-            /* ==================================================
-             * 地区
-             * ==================================================
-             */
-
-            const country =
-                safe(
-                    data.country
-                );
-
-            const countryCode =
-                safe(
-                    data.countryCode,
-                    ""
-                );
-
-            const city =
-                safe(
-                    data.city
-                );
-
-
-            /* ==================================================
-             * 风险分
-             * ==================================================
-             */
-
-            const fraudScore =
-                data.fraudScore !== undefined
-                    ? Number(
-                        data.fraudScore
-                    )
-                    : null;
-
-
-            const risk =
-                riskLevel(
-                    fraudScore
-                );
-
-
-            /* ==================================================
-             * Residential
-             * ==================================================
-             */
-
-            const residential =
-                boolText(
-                    data.isResidential
-                );
-
-
-            /* ==================================================
-             * Broadcast
-             * ==================================================
-             */
-
-            const broadcast =
-                boolText(
-                    data.isBroadcast
-                );
-
-
-            /* ==================================================
-             * 节点类型
-             * ==================================================
-             */
-
-            let nodeType =
-                "未知";
-
-
-            if (
-                data.isDataCenter === true
-            ) {
-
-                nodeType =
-                    "IDC";
-
-            } else if (
-                data.isHosting === true
-            ) {
-
-                nodeType =
-                    "Hosting";
-
-            } else if (
-                data.isResidential === true
-            ) {
-
-                nodeType =
-                    "Residential";
-
-            } else if (
-                data.isResidential === false
-            ) {
-
-                nodeType =
-                    "Commercial / IDC";
-            }
-
-
-            /* ==================================================
-             * 地区字符串
-             * ==================================================
-             */
-
-            let location =
-                country;
-
-            if (countryCode) {
-
-                location +=
-                    " (" +
-                    countryCode +
-                    ")";
-            }
-
-            if (city) {
-
-                location +=
-                    " · " +
-                    city;
-            }
-
-
-            /* ==================================================
-             * 风险分
-             * ==================================================
-             */
-
-            const scoreText =
-                fraudScore !== null
-                    ? fraudScore +
-                      " / 100"
-                    : "未知";
-
-
-            /* ==================================================
-             * 最终通知
-             * ==================================================
-             */
-
-            const result =
-
-                "节点　" +
-                node +
-
-                "\n\n" +
-
-                "IP　　" +
-                ip +
-
-                "\n" +
-
-                "ASN　 " +
-                asn +
-
-                "\n" +
-
-                "ISP　 " +
-                isp +
-
-                "\n" +
-
-                "地区　" +
-                location +
-
-                "\n\n" +
-
-                "类型　" +
-                nodeType +
-
-                "\n" +
-
-                "住宅　" +
-                residential +
-
-                "\n" +
-
-                "广播　" +
-                broadcast +
-
-                "\n\n" +
-
-                "风险　" +
-                scoreText +
-
-                "\n" +
-
-                "评级　" +
-                risk;
-
-
-            notify(
-                "🛡 IPPure 节点纯净度",
-                node,
-                result
-            );
-
-
-            $done();
+          riskColor =
+            "#991b1b";
         }
-    );
+      }
+
+
+      /* ======================================================
+       * Residential
+       * ======================================================
+       */
+
+      let residentialText =
+        "未知";
+
+
+      if (
+        residential === true
+      ) {
+
+        residentialText =
+          "✅ 是";
+
+      } else if (
+        residential === false
+      ) {
+
+        residentialText =
+          "❌ 否";
+      }
+
+
+      /* ======================================================
+       * Broadcast
+       * ======================================================
+       */
+
+      let broadcastText =
+        "未知";
+
+
+      if (
+        broadcast === true
+      ) {
+
+        broadcastText =
+          "⚠️ 是";
+
+      } else if (
+        broadcast === false
+      ) {
+
+        broadcastText =
+          "✅ 否";
+      }
+
+
+      /* ======================================================
+       * 类型
+       * ======================================================
+       */
+
+      let type =
+        "未知";
+
+
+      if (
+        data.isDataCenter === true
+      ) {
+
+        type =
+          "IDC";
+
+      } else if (
+        data.isHosting === true
+      ) {
+
+        type =
+          "Hosting";
+
+      } else if (
+        residential === true
+      ) {
+
+        type =
+          "Residential";
+
+      } else if (
+        residential === false
+      ) {
+
+        type =
+          "Commercial / IDC";
+      }
+
+
+      /* ======================================================
+       * 地区
+       * ======================================================
+       */
+
+      let location =
+        country;
+
+
+      if (
+        countryCode
+      ) {
+
+        location +=
+          " (" +
+          countryCode +
+          ")";
+      }
+
+
+      if (
+        city
+      ) {
+
+        location +=
+          " · " +
+          city;
+      }
+
+
+      /* ======================================================
+       * HTML
+       * ======================================================
+       */
+
+      let message = "";
+
+
+      message +=
+        `<div style="font-family:-apple-system; font-size:16px;">`;
+
+
+      message +=
+        `<div style="text-align:center; font-size:22px; font-weight:bold; margin-bottom:12px;">` +
+        `🛡️ IPPure 节点检测` +
+        `</div>`;
+
+
+      message +=
+        `<div style="text-align:center; color:#6959CD; font-size:15px; margin-bottom:18px;">` +
+        `${node}` +
+        `</div>`;
+
+
+      /* ======================================================
+       * IP 信息
+       * ======================================================
+       */
+
+      message +=
+        `<div style="font-weight:bold; font-size:17px; margin-top:10px;">🌐 IP 信息</div>`;
+
+
+      message +=
+        `<div style="margin-top:8px;">` +
+        `IP　　<b>${ip}</b>` +
+        `</div>`;
+
+
+      message +=
+        `<div>ASN　 <b>${asn}</b></div>`;
+
+
+      message +=
+        `<div>ISP　 <b>${isp}</b></div>`;
+
+
+      message +=
+        `<div>地区　 <b>${location}</b></div>`;
+
+
+      message +=
+        `<div>时区　 ${timezone}</div>`;
+
+
+      /* ======================================================
+       * 纯净度
+       * ======================================================
+       */
+
+      message +=
+        `<div style="font-weight:bold; font-size:17px; margin-top:18px;">🛡️ IP 纯净度</div>`;
+
+
+      message +=
+        `<div style="margin-top:8px;">` +
+        `类型　 <b>${type}</b>` +
+        `</div>`;
+
+
+      message +=
+        `<div>住宅　 ${residentialText}</div>`;
+
+
+      message +=
+        `<div>广播　 ${broadcastText}</div>`;
+
+
+      /* ======================================================
+       * 风险
+       * ======================================================
+       */
+
+      message +=
+        `<div style="font-weight:bold; font-size:17px; margin-top:18px;">⚠️ 风险评估</div>`;
+
+
+      message +=
+        `<div style="margin-top:8px;">` +
+        `风险分　<b>${fraudScore !== null ? fraudScore + " / 100" : "未知"}</b>` +
+        `</div>`;
+
+
+      message +=
+        `<div style="color:${riskColor}; font-weight:bold; font-size:18px; margin-top:5px;">` +
+        `${riskText}` +
+        `</div>`;
+
+
+      /* ======================================================
+       * Footer
+       * ======================================================
+       */
+
+      message +=
+        `<div style="margin-top:20px; padding-top:10px; border-top:1px solid #ddd; color:#888; font-size:12px; text-align:center;">` +
+        `检测服务：IPPure` +
+        `</div>`;
+
+
+      message +=
+        `</div>`;
+
+
+      /* ======================================================
+       * 返回 Loon
+       *
+       * 这是关键
+       * ======================================================
+       */
+
+      $done({
+
+        title:
+          "🛡️ IPPure 节点检测",
+
+        htmlMessage:
+          message
+      });
+
+
+    },
+
+    (reason) => {
+
+      $.log(
+        "IPPure 请求失败"
+      );
+
+      $.log(
+        reason
+      );
+
+      $done();
+
+    }
+  );
 }
+
+
+/* ============================================================
+ * Env
+ *
+ * 使用 ChatGPT.js 同样的 Env 方式
+ * ============================================================
+ */
+
+function Env(name) {
+
+  return {
+
+    name: name,
+
+    http: {
+
+      get(options) {
+
+        return new Promise(
+          (resolve, reject) => {
+
+            $httpClient.get(
+              options,
+              (
+                error,
+                response,
+                body
+              ) => {
+
+                if (error) {
+
+                  reject(error);
+
+                  return;
+                }
+
+
+                response.body =
+                  body;
+
+
+                resolve(
+                  response
+                );
+              }
+            );
+          }
+        );
+      }
+    },
+
+    log(...args) {
+
+      console.log(
+        args.join("\n")
+      );
+    },
+
+    logErr(error) {
+
+      console.log(
+        "ERROR:",
+        error
+      );
+    },
+
+    done(value) {
+
+      $done(value || {});
+    }
+  };
+}
+
+
+const $ =
+  new Env("IPPure");
