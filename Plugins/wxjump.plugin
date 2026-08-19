@@ -1,0 +1,16 @@
+#!name = 微信链接解锁
+#!desc = 解锁微信被拦截的链接，支持通知模式和中间页模式切换
+#!author = hanyeyang
+#!tag = 工具,微信
+#!type = normal
+
+[Argument]
+mode = select,"page","notify",tag=打开模式,desc=通知模式：发推送通知，点击直接跳浏览器(最可靠)；中间页模式：显示引导页，点右上角打开(不打扰)
+
+useCache = switch,false,tag=使用网页快照,desc=被封禁的链接使用网页快照(web.archive.org)打开
+
+[Script]
+http-response ^https\:\/\/(weixin110\.qq|security.wechat)\.com\/cgi-bin\/mmspamsupport-bin\/newredirectconfirmcgi\? script-path=wx110unlock.js,requires-body=true,tag=微信链接解锁,argument=[{mode},{useCache}]
+
+[MitM]
+hostname = weixin110.qq.com, security.wechat.com
