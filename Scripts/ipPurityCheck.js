@@ -3,7 +3,7 @@ IP纯度检测 for Loon
 检测节点出口IP的类型和纯度 (住宅/数据中心/代理/VPN等)
 
 [Script]
-  generic script-path=/Users/hanyeyang/physicalboxs/Scripts/ipPurityCheck.js, timeout=15, tag=IP纯度检测
+  generic script-path=https://github.com/hanyeyan/physicalboxs/raw/refs/heads/main/Scripts/ipPurityCheck.js, timeout=15, tag=IP纯度检测
 
 修改记录:
   2026-08-19 初始版本
