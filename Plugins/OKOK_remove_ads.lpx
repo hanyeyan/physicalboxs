@@ -1,0 +1,39 @@
+#!name=OKOK 去广告
+#!desc=移除开屏广告、首页/打卡页/发现页横幅与弹窗广告，拦截优惠购界面和发现页推荐流。适用 Loon 3.5.2 / OKOK iOS 3.7.x
+# 参考链接: https://kelee.one/Tool/Loon/Lpx/OKOK_remove_ads.lpx
+#!author=可莉🅥[https://github.com/luestr/ProxyResource] 修改增强
+#!openUrl=https://apps.apple.com/app/id999308991
+#!tag=去广告
+#!icon=https://raw.githubusercontent.com/luestr/IconResource/main/App_icon/120px/OKOK.png
+#!homepage=https://kelee.one/Tool/Loon/Lpx/OKOK_remove_ads.lpx
+#!loon_version=3.5.2
+#!date=2026-10-27 08:50:00
+
+[Rewrite]
+# ============ 开屏广告 ============
+# OKOK 自带广告 SDK 的开屏广告拉取接口（加密协议），拦截后 SDK 无填充直接跳过
+request if ${url} ~= /^https?:\/\/fdl\.zztfly\.com\/suba\/list/i then reject_dict(200)
+# 开屏广告第三方曝光/进度上报（xiawan8 竞价与追踪）
+request if ${url} ~= /^https?:\/\/l\.xiawan8\.com\//i then reject(404)
+request if ${url} ~= /^https?:\/\/lftxali\.xiawan8\.com\//i then reject(404)
+# 咪咕广告曝光上报
+request if ${url} ~= /^https?:\/\/ggica\.miguvideo\.com\/ad\//i then reject(404)
+# 穿山甲(Pangle) 广告 SDK 可玩广告配置
+request if ${url} ~= /^https?:\/\/lf-cdn-tos\.bytescm\.com\/obj\/static\/ad\//i then reject(404)
+
+# ============ 应用内横幅/悬浮/弹窗广告 ============
+# 首页轮播图、卡路里卡片小广告、我的页 banner/float/popUp、发现页 squareRecommend 推荐 banner
+request if ${url} ~= /^https:\/\/api\.chips-cloud\.com\/v\d\/home\/collection\/smartv\d\?/i then reject_dict(200)
+
+# ============ 发现页面 ============
+# 发现页(广场)社区推荐内容流，拦截后页面无推荐内容
+request if ${url} ~= /^https:\/\/api\.chips-cloud\.com\/v\d\/communityManage\/list\?/i then reject_dict(200)
+
+# ============ 优惠购界面 ============
+# 优惠购商品列表
+request if ${url} ~= /^https:\/\/api\.chips-cloud\.com\/v\d\/good\/list\?/i then reject_dict(200)
+# 优惠购有赞店铺页面
+request if ${url} ~= /^https:\/\/shop171777386\.m\.youzan\.com\//i then reject(404)
+
+[MitM]
+hostname=api.chips-cloud.com, shop171777386.m.youzan.com, lf-cdn-tos.bytescm.com
