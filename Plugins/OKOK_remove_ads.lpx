@@ -11,8 +11,8 @@
 
 [Rewrite]
 # ============ 开屏广告 ============
-# OKOK 自带广告 SDK 的开屏广告拉取接口（加密协议），拦截后 SDK 无填充直接跳过
-request if ${url} ~= /^https?:\/\/fdl\.zztfly\.com\/suba\/list/i then reject_dict(200)
+# OKOK 自带广告 SDK 的开屏广告拉取接口（加密协议），用 404 走 SDK 快速失败分支，避免空数据触发重试等待
+request if ${url} ~= /^https?:\/\/fdl\.zztfly\.com\/suba\/list/i then reject(404)
 # 开屏广告第三方曝光/进度上报（xiawan8 竞价与追踪）
 request if ${url} ~= /^https?:\/\/l\.xiawan8\.com\//i then reject(404)
 request if ${url} ~= /^https?:\/\/lftxali\.xiawan8\.com\//i then reject(404)
