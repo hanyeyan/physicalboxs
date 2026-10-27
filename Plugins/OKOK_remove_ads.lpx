@@ -20,6 +20,8 @@ request if ${url} ~= /^https?:\/\/lftxali\.xiawan8\.com\//i then reject(404)
 request if ${url} ~= /^https?:\/\/ggica\.miguvideo\.com\/ad\//i then reject(404)
 # 穿山甲(Pangle) 广告 SDK 可玩广告配置
 request if ${url} ~= /^https?:\/\/lf-cdn-tos\.bytescm\.com\/obj\/static\/ad\//i then reject(404)
+# 开屏广告素材图下载（SDK 缓存广告计划的素材，美团云存储）
+request if ${url} ~= /^https?:\/\/s3plus\.meituan\.net\/v1\/mss_5017c592a8a946d2a54eb62a76ba299c\/nebulafile\//i then reject(404)
 
 # ============ 应用内横幅/悬浮/弹窗广告 ============
 # 首页轮播图、卡路里卡片小广告、我的页 banner/float/popUp、发现页 squareRecommend 推荐 banner
@@ -36,4 +38,4 @@ request if ${url} ~= /^https:\/\/api\.chips-cloud\.com\/v\d\/good\/list\?/i then
 request if ${url} ~= /^https:\/\/shop171777386\.m\.youzan\.com\//i then reject(404)
 
 [MitM]
-hostname=api.chips-cloud.com, shop171777386.m.youzan.com, lf-cdn-tos.bytescm.com
+hostname=api.chips-cloud.com, shop171777386.m.youzan.com, lf-cdn-tos.bytescm.com, s3plus.meituan.net
