@@ -1,13 +1,13 @@
 #!name=OKOK 去广告
 #!desc=移除开屏广告、首页/打卡页/发现页横幅与弹窗广告，拦截优惠购界面和发现页推荐流。适用 Loon 3.5.2 / OKOK iOS 3.7.x
 # 参考链接: https://kelee.one/Tool/Loon/Lpx/OKOK_remove_ads.lpx
-#!author=可莉🅥[https://github.com/luestr/ProxyResource] 修改增强
+#!author=hanyeyang
 #!openUrl=https://apps.apple.com/app/id999308991
 #!tag=去广告
 #!icon=https://raw.githubusercontent.com/luestr/IconResource/main/App_icon/120px/OKOK.png
 #!homepage=https://kelee.one/Tool/Loon/Lpx/OKOK_remove_ads.lpx
 #!loon_version=3.5.2
-#!date=2026-10-27 08:50:00
+#!date=2026-11-03 09:00:00
 
 [Rewrite]
 # ============ 开屏广告 ============
@@ -22,6 +22,13 @@ request if ${url} ~= /^https?:\/\/ggica\.miguvideo\.com\/ad\//i then reject(404)
 request if ${url} ~= /^https?:\/\/lf-cdn-tos\.bytescm\.com\/obj\/static\/ad\//i then reject(404)
 # 开屏广告素材图下载（SDK 缓存广告计划的素材，美团云存储）
 request if ${url} ~= /^https?:\/\/s3plus\.meituan\.net\/v1\/mss_5017c592a8a946d2a54eb62a76ba299c\/nebulafile\//i then reject(404)
+# 芯海自建 CPC 广告服务（第二套广告 SDK，下发京东等互动开屏广告配置，yunxish/iggrowth 双域名）
+request if ${url} ~= /^https?:\/\/cpc-service-square\.(yunxish\.com|iggrowth\.cn)\//i then reject(404)
+# 自营广告曝光/点击监测
+request if ${url} ~= /^https?:\/\/track\.vol\.ad-link\.cn\//i then reject(404)
+# 广告 SDK 行为日志上报
+request if ${url} ~= /^https?:\/\/(logrcv|tracelog-debug)\.yunxish\.com\//i then reject(404)
+request if ${url} ~= /^https?:\/\/usr-api\.yunxish\.com\/report\//i then reject(404)
 
 # ============ 应用内横幅/悬浮/弹窗广告 ============
 # 首页轮播图、卡路里卡片小广告、我的页 banner/float/popUp、发现页 squareRecommend 推荐 banner
@@ -38,4 +45,4 @@ request if ${url} ~= /^https:\/\/api\.chips-cloud\.com\/v\d\/good\/list\?/i then
 request if ${url} ~= /^https:\/\/shop171777386\.m\.youzan\.com\//i then reject(404)
 
 [MitM]
-hostname=api.chips-cloud.com, shop171777386.m.youzan.com, lf-cdn-tos.bytescm.com, s3plus.meituan.net
+hostname=api.chips-cloud.com, shop171777386.m.youzan.com, lf-cdn-tos.bytescm.com, s3plus.meituan.net, cpc-service-square.yunxish.com, cpc-service-square.iggrowth.cn, track.vol.ad-link.cn, logrcv.yunxish.com, tracelog-debug.yunxish.com, usr-api.yunxish.com
