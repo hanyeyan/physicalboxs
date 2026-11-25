@@ -11,16 +11,18 @@
 #!date=2026-10-02 13:57:49
 
 # ===== 修改记录 (Modification Log) =====
-# 2026-11-25  新增「去广告总开关」：
-#   - [Argument] 声明 rp_switch 开关（默认开启），插件界面可一键切换。
-#   - 每条 [Script] 增加 enable=${rp_switch}：关闭时引擎层停用脚本，直接放行原始响应。
+# 2026-11-25  改为「移除详情页小部件」单项开关（取代总开关）：
+#   - [Argument] 声明 remove_widgets 开关（默认开启），插件界面可切换。
+#   - 仅「移除详情页小部件、关注页感兴趣的人」这条脚本挂 enable=${remove_widgets}：
+#     关闭时引擎层停用该条目，放行原始响应（详情页小部件与关注页感兴趣的人恢复）。
+#   - 其余 11 条脚本不挂开关，始终生效（与原版一致）。
+#   - 该规则正则同时覆盖 note/widgets 与 user/followings/followfeed，二者共用一条开关；
+#     如需单独拆分需改远程 JS，当前在 lpx 层只能整条控制。
 #   - 脚本路径使用远程 GitHub raw 镜像（不依赖本地导入）。
-#   - 开关由 enable=${rp_switch} 在引擎层控制：关闭即停用该脚本条目，直接放行原始响应。
-#     远程脚本不消费参数，故不传 {${rp_switch}}，避免误导。
-#   - 原文件 RedPaper_remove_ads.lpx / .js 保持不变，本副本用于对比验证。
+#   - 原文件 RedPaper_remove_ads.lpx / .js 及总开关版 switched.lpx 保持不变，本副本用于对比验证。
 
 [Argument]
-rp_switch = switch,true,type=boolean,tag=去广告总开关,desc=关闭后放行原始响应，不做任何去广告/去水印处理
+remove_widgets = switch,true,type=boolean,tag=移除详情页小部件,desc=关闭后恢复详情页小部件与关注页感兴趣的人（共用一条规则），其余去广告功能不受影响
 
 [Rule]
 AND, ((PROTOCOL, QUIC), (DOMAIN-SUFFIX, xiaohongshu.com)), REJECT
@@ -40,29 +42,29 @@ response if ${url} ~= /^https:\/\/edith\.xiaohongshu\.com\/api\/sns\/v4\/search\
 response if ${url} ~= /^https:\/\/edith\.xiaohongshu\.com\/api\/sns\/v4\/search\/trending\?/i then response.json.replace(["data.queries", "data.hint_word"], ["[]", "{}"])
 
 [Script]
-response if ${url} ~= /^https:\/\/edith\.xiaohongshu\.com\/api\/sns\/v1\/note\/(?:imagefeed|live_photo\/save)/i then script("https://raw.githubusercontent.com/fkingikelee/fkikelee/main/Resource/kelee/JavaScript/RedPaper/RedPaper_remove_ads.js") with enable=${rp_switch}, tag="移除图片和实况照片水印", requires_body=true
+response if ${url} ~= /^https:\/\/edith\.xiaohongshu\.com\/api\/sns\/v1\/note\/(?:imagefeed|live_photo\/save)/i then script("https://raw.githubusercontent.com/fkingikelee/fkikelee/main/Resource/kelee/JavaScript/RedPaper/RedPaper_remove_ads.js") with tag="移除图片和实况照片水印", requires_body=true
 
-response if ${url} ~= /^https:\/\/edith\.xiaohongshu\.com\/api\/sns\/v1\/system\/service\/ui\/config\?/i then script("https://raw.githubusercontent.com/fkingikelee/fkikelee/main/Resource/kelee/JavaScript/RedPaper/RedPaper_remove_ads.js") with enable=${rp_switch}, tag="移除整体配置 ui", requires_body=true
+response if ${url} ~= /^https:\/\/edith\.xiaohongshu\.com\/api\/sns\/v1\/system\/service\/ui\/config\?/i then script("https://raw.githubusercontent.com/fkingikelee/fkikelee/main/Resource/kelee/JavaScript/RedPaper/RedPaper_remove_ads.js") with tag="移除整体配置 ui", requires_body=true
 
-response if ${url} ~= /^https:\/\/edith\.xiaohongshu\.com\/api\/sns\/v1\/system_service\/config\?/i then script("https://raw.githubusercontent.com/fkingikelee/fkikelee/main/Resource/kelee/JavaScript/RedPaper/RedPaper_remove_ads.js") with enable=${rp_switch}, tag="移除开屏广告 config", requires_body=true
+response if ${url} ~= /^https:\/\/edith\.xiaohongshu\.com\/api\/sns\/v1\/system_service\/config\?/i then script("https://raw.githubusercontent.com/fkingikelee/fkikelee/main/Resource/kelee/JavaScript/RedPaper/RedPaper_remove_ads.js") with tag="移除开屏广告 config", requires_body=true
 
-response if ${url} ~= /^https:\/\/edith\.xiaohongshu\.com\/api\/sns\/v2\/system_service\/splash_config/i then script("https://raw.githubusercontent.com/fkingikelee/fkikelee/main/Resource/kelee/JavaScript/RedPaper/RedPaper_remove_ads.js") with enable=${rp_switch}, tag="移除开屏广告 splash_config", requires_body=true
+response if ${url} ~= /^https:\/\/edith\.xiaohongshu\.com\/api\/sns\/v2\/system_service\/splash_config/i then script("https://raw.githubusercontent.com/fkingikelee/fkikelee/main/Resource/kelee/JavaScript/RedPaper/RedPaper_remove_ads.js") with tag="移除开屏广告 splash_config", requires_body=true
 
-response if ${url} ~= /^https:\/\/edith\.xiaohongshu\.com\/api\/sns\/v2\/(?:note\/widgets|user\/followings\/followfeed)/i then script("https://raw.githubusercontent.com/fkingikelee/fkikelee/main/Resource/kelee/JavaScript/RedPaper/RedPaper_remove_ads.js") with enable=${rp_switch}, tag="移除详情页小部件、关注页感兴趣的人", requires_body=true
+response if ${url} ~= /^https:\/\/edith\.xiaohongshu\.com\/api\/sns\/v2\/(?:note\/widgets|user\/followings\/followfeed)/i then script("https://raw.githubusercontent.com/fkingikelee/fkikelee/main/Resource/kelee/JavaScript/RedPaper/RedPaper_remove_ads.js") with enable=${remove_widgets}, tag="移除详情页小部件、关注页感兴趣的人", requires_body=true
 
-response if ${url} ~= /^https:\/\/edith\.xiaohongshu\.com\/api\/sns\/v4\/followfeed\?/i then script("https://raw.githubusercontent.com/fkingikelee/fkikelee/main/Resource/kelee/JavaScript/RedPaper/RedPaper_remove_ads.js") with enable=${rp_switch}, tag="移除信息流广告", requires_body=true
+response if ${url} ~= /^https:\/\/edith\.xiaohongshu\.com\/api\/sns\/v4\/followfeed\?/i then script("https://raw.githubusercontent.com/fkingikelee/fkikelee/main/Resource/kelee/JavaScript/RedPaper/RedPaper_remove_ads.js") with tag="移除信息流广告", requires_body=true
 
-response if ${url} ~= /^https:\/\/edith\.xiaohongshu\.com\/api\/sns\/v5\/recommend\/user\/follow_recommend\?/i then script("https://raw.githubusercontent.com/fkingikelee/fkikelee/main/Resource/kelee/JavaScript/RedPaper/RedPaper_remove_ads.js") with enable=${rp_switch}, tag="移除详情页感兴趣的人", requires_body=true
+response if ${url} ~= /^https:\/\/edith\.xiaohongshu\.com\/api\/sns\/v5\/recommend\/user\/follow_recommend\?/i then script("https://raw.githubusercontent.com/fkingikelee/fkikelee/main/Resource/kelee/JavaScript/RedPaper/RedPaper_remove_ads.js") with tag="移除详情页感兴趣的人", requires_body=true
 
-response if ${url} ~= /^https:\/\/edith\.xiaohongshu\.com\/api\/sns\/(?:v1\/interaction\/comment\/video\/download|v5\/note\/comment\/list)/i then script("https://raw.githubusercontent.com/fkingikelee/fkikelee/main/Resource/kelee/JavaScript/RedPaper/RedPaper_remove_ads.js") with enable=${rp_switch}, tag="移除评论区实况照片水印", requires_body=true
+response if ${url} ~= /^https:\/\/edith\.xiaohongshu\.com\/api\/sns\/(?:v1\/interaction\/comment\/video\/download|v5\/note\/comment\/list)/i then script("https://raw.githubusercontent.com/fkingikelee/fkikelee/main/Resource/kelee/JavaScript/RedPaper/RedPaper_remove_ads.js") with tag="移除评论区实况照片水印", requires_body=true
 
-response if ${url} ~= /^https:\/\/edith\.xiaohongshu\.com\/api\/sns\/(?:v2\/note\/feed|v3\/note\/videofeed)/i then script("https://raw.githubusercontent.com/fkingikelee/fkikelee/main/Resource/kelee/JavaScript/RedPaper/RedPaper_remove_ads.js") with enable=${rp_switch}, tag="移除图片和视频水印", requires_body=true
+response if ${url} ~= /^https:\/\/edith\.xiaohongshu\.com\/api\/sns\/(?:v2\/note\/feed|v3\/note\/videofeed)/i then script("https://raw.githubusercontent.com/fkingikelee/fkikelee/main/Resource/kelee/JavaScript/RedPaper/RedPaper_remove_ads.js") with tag="移除图片和视频水印", requires_body=true
 
-response if ${url} ~= /^https:\/\/(?:edith|rec)\.xiaohongshu\.com\/api\/sns\/v6\/homefeed\?/i then script("https://raw.githubusercontent.com/fkingikelee/fkikelee/main/Resource/kelee/JavaScript/RedPaper/RedPaper_remove_ads.js") with enable=${rp_switch}, tag="移除信息流广告", requires_body=true
+response if ${url} ~= /^https:\/\/(?:edith|rec)\.xiaohongshu\.com\/api\/sns\/v6\/homefeed\?/i then script("https://raw.githubusercontent.com/fkingikelee/fkikelee/main/Resource/kelee/JavaScript/RedPaper/RedPaper_remove_ads.js") with tag="移除信息流广告", requires_body=true
 
-response if ${url} ~= /^https:\/\/(?:edith|so)\.xiaohongshu\.com\/api\/sns\/v10\/search\/notes\?/i then script("https://raw.githubusercontent.com/fkingikelee/fkikelee/main/Resource/kelee/JavaScript/RedPaper/RedPaper_remove_ads.js") with enable=${rp_switch}, tag="移除搜索页广告", requires_body=true
+response if ${url} ~= /^https:\/\/(?:edith|so)\.xiaohongshu\.com\/api\/sns\/v10\/search\/notes\?/i then script("https://raw.githubusercontent.com/fkingikelee/fkikelee/main/Resource/kelee/JavaScript/RedPaper/RedPaper_remove_ads.js") with tag="移除搜索页广告", requires_body=true
 
-response if ${url} ~= /^https:\/\/(?:edith|rec|www)\.xiaohongshu\.com\/api\/sns\/(?:v4\/note\/videofeed|v10\/note\/video\/save)/i then script("https://raw.githubusercontent.com/fkingikelee/fkikelee/main/Resource/kelee/JavaScript/RedPaper/RedPaper_remove_ads.js") with enable=${rp_switch}, tag="移除视频水印", requires_body=true
+response if ${url} ~= /^https:\/\/(?:edith|rec|www)\.xiaohongshu\.com\/api\/sns\/(?:v4\/note\/videofeed|v10\/note\/video\/save)/i then script("https://raw.githubusercontent.com/fkingikelee/fkikelee/main/Resource/kelee/JavaScript/RedPaper/RedPaper_remove_ads.js") with tag="移除视频水印", requires_body=true
 
 [MitM]
 hostname=ci.xiaohongshu.com, edith.xiaohongshu.com, rec.xiaohongshu.com, so.xiaohongshu.com, www.xiaohongshu.com
